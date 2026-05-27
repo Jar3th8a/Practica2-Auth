@@ -6,11 +6,11 @@ import LoginView from '../components/Login.vue';
 import DashboardProductos from '../App.vue'; 
 
 const routes = [
-  {
-    path: '/login',
+ { 
+    path: '/login', 
     name: 'login',
-    component: LoginView,
-    meta: { requiresAuth: false }
+    // Cambia 'components' por 'views' y asegúrate de que termine en LoginView.vue
+    component: () => import('../views/LoginView.vue') 
   },
   {
     path: '/productos',

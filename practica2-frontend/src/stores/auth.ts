@@ -1,64 +1,32 @@
-import { defineStore } from 'pinia';
-import axios from 'axios';
-
-// URL base de tu API de Laravel
-const API_URL = 'http://localhost:8000/api';
-
-interface User {
-  id: number;
-  name: string;
-  email: string;
-}
+import { defineStore } from 'pinia'
+import axios from 'axios'
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
-    user: null as User | null,
+    user: null,
     token: localStorage.getItem('token') || null,
   }),
-
-  getters: {
-    isAuthenticated: (state) => !!state.token,
-  },
-
   actions: {
-    // Acción para Iniciar Sesión
-    async login(credentials: object) {
+    async login(credenciales: { email: string; password: string }) {
       try {
-        const response = await axios.post(`${API_URL}/login`, credentials);
-        this.token = response.data.token;
-        this.user = response.data.user;
-        localStorage.setItem('token', response.data.token);
-        return response.data;
-      } catch (error: any) {
-        throw error.response?.data || error.message;
-      }
-    },
-
-    // Acción para Registrar Usuario
-    async register(data: object) {
-      try {
-        const response = await axios.post(`${API_URL}/register`, data);
-        this.token = response.data.token;
-        this.user = response.data.user;
-        localStorage.setItem('token', response.data.token);
-        return response.data;
-      } catch (error: any) {
-        throw error.response?.data || error.message;
-      }
-    },
-
-    // Acción para Cerrar Sesión
-    async logout() {
-      try {
-        await axios.post(`${API_URL}/logout`);
+        // 🟢 CONFIGURACIÓN DIRECTA: Apuntamos al puerto local de tu Laravel
+        const respuesta = await axios.post('http://127.0.0.1:8000/api/login', credenciales)
+        
+        // Si el backend responde con el token
+        if (respuesta.data && respuesta.data.access_token) {
+          this.token = respuesta.data.access_token
+          this.user = respuesta.data.user
+          
+          // Guardamos el token en el navegador para los Guards de ruta
+          localStorage.setItem('token', respuesta.data.access_token)
+          
+          return true
+        }
+        return false
       } catch (error) {
-        console.error('Error al avisar del logout al backend:', error);
-      } finally {
-        // Limpiamos los datos locales pase lo que pase
-        this.user = null;
-        this.token = null;
-        localStorage.removeItem('token');
+        // Lanza el error para que el LoginView.vue lo cachee en la interfaz
+        throw error
       }
     }
   }
-});
+})

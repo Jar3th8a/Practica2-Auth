@@ -2,67 +2,72 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\User; // <-- IMPORTANTE: Usa tu modelo explícito
 use Illuminate\Http\Request;
-use App\Models\User; // <-- IMPORTANTE: Faltaba importar el modelo User
-use Illuminate\Support\Facades\Hash; // <-- IMPORTANTE: Para verificar y encriptar contraseñas
-use Illuminate\Support\Facades\Auth; // <-- IMPORTANTE: Para manejar la autenticación
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Validator;
 
 class AuthController extends Controller
 {
-    // register() - Valida y crea el usuario, retorna token
-    public function register(Request $request) {
-        $request->validate([
-            'name'     => 'required|string|max:255',
-            'email'    => 'required|email|unique:users',
-            'password' => 'required|min:8|confirmed', // Espera que mandes 'password_confirmation'
-        ]);
-
-        // Es vital usar Hash::make para que la contraseña no se guarde en texto plano
-        $user = User::create([
-            'name' => $request->name,
-            'email' => $request->email,
-            'password' => Hash::make($request->password),
-        ]);
-
-        $token = $user->createToken('auth-token')->plainTextToken;
-
-        return response()->json(['token' => $token, 'user' => $user], 201);
-    }
-     
-    // login() - Verifica credenciales y retorna token
-    public function login(Request $request) {
-        $request->validate([
+    /**
+     * Maneja el inicio de sesión seguro y retorna el token de Sanctum.
+     */
+    public function login(Request $request)
+    {
+        // 1. Validamos los campos que llegan desde Vue
+        $validator = Validator::make($request->all(), [
             'email'    => 'required|email',
             'password' => 'required',
         ]);
 
-        // Buscamos si el usuario existe
+        if ($validator->fails()) {
+            return response()->json([
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        // 2. Buscamos al usuario directamente en la tabla users
         $user = User::where('email', $request->email)->first();
 
-        // Verificamos si existe y si la contraseña coincide con el Hash de la BD
+        // 3. Verificamos si existe el usuario y si la contraseña coincide
         if (!$user || !Hash::check($request->password, $user->password)) {
             return response()->json([
                 'message' => 'Las credenciales proporcionadas son incorrectas.'
             ], 401);
         }
 
-        // Generamos el nuevo token
-        $token = $user->createToken('auth-token')->plainTextToken;
+        // 4. Verificación de seguridad extrema antes de emitir el token
+        if (!method_exists($user, 'createToken')) {
+            return response()->json([
+                'message' => 'Error de configuración: El modelo User no tiene el trait HasApiTokens.'
+            ], 500);
+        }
 
-        return response()->json(['token' => $token, 'user' => $user], 200);
+        // 5. Generamos el token de Sanctum de forma directa
+        $token = $user->createToken('auth_token')->plainTextToken;
+
+        // 6. Respondemos al frontend con éxito
+        return response()->json([
+            'access_token' => $token,
+            'token_type'   => 'Bearer',
+            'user'         => [
+                'id'    => $user->id,
+                'name'  => $user->name,
+                'email' => $user->email,
+            ]
+        ], 200);
     }
 
-    // logout() - Elimina el token actual (requiere middleware auth:sanctum)
-    public function logout(Request $request) {
-        // Revoca (elimina) el token que el usuario usó para hacer esta petición
+    /**
+     * Destruye los tokens del usuario al cerrar sesión.
+     */
+    public function logout(Request $request)
+    {
+        // Borramos el token activo de la petición
         $request->user()->currentAccessToken()->delete();
 
-        return response()->json(['message' => 'Sesión cerrada con éxito.'], 200);
-    }
-
-    // me() - Retorna el usuario autenticado (requiere middleware auth:sanctum)
-    public function me(Request $request) {
-        // Retorna la información del usuario que tiene el token activo
-        return response()->json($request->user(), 200);
+        return response()->json([
+            'message' => 'Sesión cerrada correctamente'
+        ], 200);
     }
 }
